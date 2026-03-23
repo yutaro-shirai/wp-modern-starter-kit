@@ -23,7 +23,7 @@ Thank you for your interest in contributing to this project! This document provi
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/i-Willink-Inc/wp-modern-starter-kit.git
+   git clone https://github.com/i-Willink-LLC/wp-modern-starter-kit.git
    cd wp-modern-starter-kit
    ```
 
