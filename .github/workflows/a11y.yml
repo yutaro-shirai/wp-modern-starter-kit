@@ -1,0 +1,64 @@
+name: Accessibility
+
+# pa11y + Lighthouse でアクセシビリティ自動チェック。
+# WCAG 2.2 Level AA 準拠を CI で担保する雛形。
+# .pa11yci.json / lighthouserc 設定はテーマ側で追加すれば有効化される。
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  pa11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install --no-save pa11y-ci@^3.1.0
+
+      - name: Build CSS
+        run: npm run build
+
+      # NOTE: 実 WordPress 環境を CI で立てるには docker compose 等が必要。
+      #       現段階は静的 HTML プレビュー (template-parts の sample) に対して pa11y を走らせる方針。
+      #       wp-env を使った full 統合は Phase 3 後半で実装予定。
+      - name: Run pa11y on rendered samples (placeholder)
+        run: |
+          if [ -f .pa11yci.json ]; then
+            npx pa11y-ci --config .pa11yci.json
+          else
+            echo "::warning::.pa11yci.json not yet configured. Will be added in Sprint B."
+            exit 0
+          fi
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Lighthouse audit (placeholder)
+        run: |
+          if [ -f lighthouserc.js ] || [ -f lighthouserc.json ]; then
+            npm install --no-save @lhci/cli
+            npx lhci autorun || echo "::warning::Lighthouse non-blocking until Sprint C tuning."
+          else
+            echo "::notice::Lighthouse config will be added in Sprint C."
+          fi

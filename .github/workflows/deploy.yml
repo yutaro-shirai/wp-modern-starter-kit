@@ -1,0 +1,161 @@
+name: Deploy
+
+# テーマ ZIP を本番 (or staging) サーバへ自動デプロイ。
+# - release published: 本番自動デプロイ
+# - workflow_dispatch: 手動 staging / production を選択
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   DEPLOY_HOST       ホスト名 (例: ssh.example.com)
+#   DEPLOY_USER       SSH ユーザー名
+#   DEPLOY_SSH_KEY    SSH 秘密鍵 (PEM 形式・改行含む全文)
+#   DEPLOY_KNOWN_HOSTS  ssh-keyscan の出力 (ホスト鍵検証用・MITM 対策で必須)
+#   DEPLOY_PATH       テーマ展開先ディレクトリ (例: /home/USER/public_html/wp-content/themes)
+#   DEPLOY_THEME_SLUG テーマスラッグ (例: esperanza-wp-theme・解凍後のディレクトリ名)
+#
+# Vars (Settings > Secrets and variables > Actions > Variables):
+#   DEPLOY_ENABLED      "true" でこの workflow を有効化 (未設定なら no-op)
+#   DEPLOY_BACKUP       "true" で展開前に旧テーマを wp-content/themes-backup/ に退避
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: deploy-${{ github.event.inputs.target || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ vars.DEPLOY_ENABLED }}" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::DEPLOY_ENABLED variable is not 'true'. Skipping deploy."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+      - run: npm ci
+      - name: Build production CSS
+        run: npm run build
+      - name: Package theme zip
+        run: npm run zip
+      - name: Verify zip artifact
+        run: |
+          ls -lh dist/
+          unzip -l dist/*.zip | head -30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: theme-zip
+          path: dist/*.zip
+          retention-days: 14
+
+  deploy-sftp:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.target || 'production' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: theme-zip
+          path: dist/
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -z "${{ secrets.DEPLOY_KNOWN_HOSTS }}" ]; then
+            echo "::error::DEPLOY_KNOWN_HOSTS secret is required for host key verification."
+            exit 1
+          fi
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Locate zip
+        id: zip
+        run: |
+          ZIP=$(ls dist/*.zip | head -1)
+          echo "path=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload zip to server
+        env:
+          SSH: ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes
+          USER_HOST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
+            "${{ steps.zip.outputs.path }}" \
+            "${USER_HOST}:${{ secrets.DEPLOY_PATH }}/${{ steps.zip.outputs.name }}"
+
+      - name: Backup old theme (optional)
+        if: vars.DEPLOY_BACKUP == 'true'
+        env:
+          USER_HOST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          THEMES_DIR: ${{ secrets.DEPLOY_PATH }}
+          SLUG: ${{ secrets.DEPLOY_THEME_SLUG }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes "${USER_HOST}" \
+            "cd ${THEMES_DIR} && \
+             if [ -d ${SLUG} ]; then \
+               TS=\$(date +%Y%m%d-%H%M%S); \
+               mkdir -p ../themes-backup && \
+               tar czf ../themes-backup/${SLUG}-\${TS}.tgz ${SLUG} && \
+               echo Backup: ../themes-backup/${SLUG}-\${TS}.tgz; \
+             fi"
+
+      - name: Extract zip on server
+        env:
+          USER_HOST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          THEMES_DIR: ${{ secrets.DEPLOY_PATH }}
+          SLUG: ${{ secrets.DEPLOY_THEME_SLUG }}
+          ZIP_NAME: ${{ steps.zip.outputs.name }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes "${USER_HOST}" \
+            "cd ${THEMES_DIR} && \
+             rm -rf ${SLUG}-incoming && \
+             unzip -q ${ZIP_NAME} -d ${SLUG}-incoming && \
+             rm -rf ${SLUG}.old && \
+             if [ -d ${SLUG} ]; then mv ${SLUG} ${SLUG}.old; fi && \
+             mv ${SLUG}-incoming ${SLUG} && \
+             rm -rf ${SLUG}.old && \
+             rm -f ${ZIP_NAME} && \
+             echo Deployed: ${SLUG}"
+
+      - name: Verify deploy
+        env:
+          USER_HOST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          THEMES_DIR: ${{ secrets.DEPLOY_PATH }}
+          SLUG: ${{ secrets.DEPLOY_THEME_SLUG }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes "${USER_HOST}" \
+            "ls -la ${THEMES_DIR}/${SLUG} | head -5 && \
+             head -12 ${THEMES_DIR}/${SLUG}/style.css"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
