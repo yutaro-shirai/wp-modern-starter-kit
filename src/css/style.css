@@ -1,3 +1,17 @@
+/*
+ * i-Willink DS primitives — MUST be imported before any brand/custom
+ * layers. Primitives-only contract: brand colors stay this theme's own
+ * (DS semantic brand roles are intentionally NOT imported).
+ * See README "i-Willink DS primitives".
+ *
+ * NOTE: the canonical specifier is
+ * "@willink-labs/css-tokens/tokens.scale.css" (a package.json#exports
+ * alias), but postcss-import — bundled in the tailwindcss v3 CLI — does
+ * not resolve #exports maps, so we import the physical published path
+ * src/tokens.scale.css instead. Same file, inlined into dist/style.css
+ * at build time.
+ */
+@import "@willink-labs/css-tokens/src/tokens.scale.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

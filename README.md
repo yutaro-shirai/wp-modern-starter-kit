@@ -14,6 +14,7 @@ Tailwind CSS によるモダンなスタイリング、事前構築済みの UI 
 - [プロジェクト構成](#-プロジェクト構成)
 - [クイックスタート](#-クイックスタート)
 - [開発ガイド](#-開発ガイド)
+- [i-Willink DS primitives](#-i-willink-ds-primitives)
 - [ビルドと納品](#-ビルドと納品)
 - [利用可能なコマンド](#-利用可能なコマンド)
 - [ドキュメント](#-ドキュメント)
@@ -174,6 +175,57 @@ get_template_part('parts/molecules/breadcrumbs', null, [
 ローカル環境起動後、コンポーネントライブラリページで全コンポーネントのプレビューと使用方法を確認できます。
 
 *   **コンポーネントライブラリ**: http://localhost:8888/?page_id=5
+
+---
+
+## 🎨 i-Willink DS primitives
+
+このキットは [i-Willink Design System](https://github.com/willink-oss/willink-design-system) の **primitives（プリミティブトークン）のみ** を [`@willink-labs/css-tokens`](https://github.com/willink-oss/willink-design-system/tree/main/packages/css-tokens)（public npm / 認証不要）経由で取り込んでいます。
+
+### 何を import しているか
+
+`src/css/style.css` の先頭（brand / カスタムレイヤーより**前**）で primitives-only ファイルを import しています。
+
+```css
+@import "@willink-labs/css-tokens/src/tokens.scale.css";
+```
+
+`npm run build`（tailwindcss v3 CLI）が node_modules から解決し、`dist/style.css` に**インライン展開**されます。WordPress 側に追加の enqueue は不要です。
+
+> [!NOTE]
+> 正規の specifier は `@willink-labs/css-tokens/tokens.scale.css`（package.json `#exports` の alias）ですが、tailwindcss v3 CLI に同梱の postcss-import は `#exports` map を解決できないため、実体パス `src/tokens.scale.css` を import しています（同一ファイル）。
+
+import されるのは `:root` 上の CSS 変数（プリミティブのみ）です。
+
+| カテゴリ | 変数例 |
+|---------|--------|
+| Color scale | `--color-neutral-50..950`, `--color-blue-*` など数値スケール |
+| Radius | `--radius-sm` `--radius-md` `--radius-lg` `--radius-xl` `--radius-full` |
+| Duration | `--duration-fast` `--duration-base` `--duration-slow` |
+| Easing | `--ease-standard` `--ease-emphasized` |
+| Shadow | `--shadow-soft` `--shadow-md` `--shadow-glow` |
+
+### Primitives-only 契約（brand は import しない）
+
+DS の **semantic / brand ロール（`tokens.semantic.css` 等）は意図的に import していません**。ブランドカラーはテーマ（このキットおよび各クライアントテーマ）側が自前で定義します。DS から受け取るのは radius / motion / shadow / 数値カラースケールといった土台のみです。
+
+### 上書き方法
+
+CSS 変数のカスケードで上書きできます。import より**後**に `:root` で再宣言してください。
+
+```css
+@import "@willink-labs/css-tokens/src/tokens.scale.css";
+
+:root {
+  --radius-md: 0.375rem; /* テーマ都合で DS 値を上書き */
+}
+```
+
+### ドキュメント
+
+- リポジトリ: https://github.com/willink-oss/willink-design-system
+- パッケージ docs: [`packages/css-tokens/README.md`](https://github.com/willink-oss/willink-design-system/tree/main/packages/css-tokens)
+- ADR: [ADR-0009 css-tokens package](https://github.com/willink-oss/willink-design-system/blob/main/docs/adr/0009-css-tokens-package.md)
 
 ---
 

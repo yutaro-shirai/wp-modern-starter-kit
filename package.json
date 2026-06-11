@@ -19,6 +19,7 @@
     "zip": "npm run build && mkdir -p dist && zip -r dist/wp-modern-starter-kit.zip . -x \"node_modules/*\" \"src/*\" \".git/*\" \"dist/*.zip\" \".github/*\" \"*.md\" \"wp-env.json\""
   },
   "dependencies": {
+    "@willink-labs/css-tokens": "^1.2.0",
     "concurrently": "^8.2.2"
   },
   "devDependencies": {

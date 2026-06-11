@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **i-Willink DS primitives** via [`@willink-labs/css-tokens`](https://github.com/willink-oss/willink-design-system/tree/main/packages/css-tokens) `^1.2.0`:
+  - `tokens.scale.css` (primitives-only) imported at the top of `src/css/style.css`, inlined into `dist/style.css` at build time
+  - Primitives-only contract: radius / duration / easing / shadow / numeric color scales — DS semantic brand roles are NOT imported (brand colors stay theme-owned)
+  - See README "i-Willink DS primitives" for override mechanics and the postcss-import `#exports` resolution note
 - **23 new UI components** for comprehensive WordPress theming:
   - **Atoms (8)**: checkbox, radio, select, toggle, divider, progress, rating, tooltip
   - **Molecules (8)**: pagination, tabs, stat, steps, dropdown, accordion, menu, form-group
